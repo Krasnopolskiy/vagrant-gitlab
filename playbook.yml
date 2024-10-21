@@ -1,0 +1,13 @@
+---
+- name: Initialize Swarm
+  become: true
+  hosts: all
+  roles:
+    - docker
+    - swarm
+
+- name: Deploy GitLab
+  become: true
+  hosts: leader
+  roles:
+    - gitlab

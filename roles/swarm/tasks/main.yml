@@ -1,0 +1,27 @@
+---
+- name: Install packages
+  apt:
+    name:
+      - python3
+      - python3-pip
+    state: present
+
+- name: Install pip requirements
+  pip:
+    name: docker
+    state: present
+
+- name: Initialize Swarm leader
+  import_tasks:
+    file: leader.yml
+  when: inventory_hostname == 'leader'
+
+- name: Join Swarm managers
+  import_tasks:
+    file: managers.yml
+  when: inventory_hostname in groups['managers']
+
+- name: Join Swarm workers
+  import_tasks:
+    file: workers.yml
+  when: inventory_hostname in groups['workers']

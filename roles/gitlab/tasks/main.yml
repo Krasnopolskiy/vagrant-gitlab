@@ -1,0 +1,28 @@
+---
+- name: Install pip requirements
+  pip:
+    name: jsondiff
+    state: present
+
+- name: Create directory for GitLab stack
+  file:
+    path: "{{ stack_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Copy GitLab stack file
+  template:
+    src: docker-compose.yml.j2
+    dest: "{{ compose_file }}"
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Deploy GitLab stack
+  community.docker.docker_stack:
+    name: gitlab
+    state: present
+    compose:
+      - "{{ compose_file }}"

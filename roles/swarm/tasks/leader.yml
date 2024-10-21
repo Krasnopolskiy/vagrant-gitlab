@@ -1,0 +1,19 @@
+---
+- name: Set leader address as variable
+  set_fact:
+    addr: "{{ hostvars[groups['leader'][0]]['ansible_default_ipv4']['address'] }}"
+
+- name: Initialize Swarm
+  community.docker.docker_swarm:
+    state: present
+    advertise_addr: "{{ addr }}"
+
+- name: Retrieve Swarm info
+  community.docker.docker_swarm_info:
+    nodes: true
+  register: swarm
+
+- name: Set join tokens as variables
+  set_fact:
+    worker_token: "{{ swarm['swarm_facts']['JoinTokens']['Worker'] }}"
+    manager_token: "{{ swarm['swarm_facts']['JoinTokens']['Manager'] }}"

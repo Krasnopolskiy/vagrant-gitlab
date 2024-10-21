@@ -1,0 +1,3 @@
+---
+stack_dir: /opt/gitlab
+compose_file: "{{ stack_dir }}/docker-compose.yml"
