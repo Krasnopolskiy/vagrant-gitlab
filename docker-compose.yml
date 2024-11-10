@@ -1,0 +1,105 @@
+services:
+  postgres-master:
+    image: postgres:17
+    environment:
+      - POSTGRES_USER=gitlab
+      - POSTGRES_PASSWORD=gitlab_password
+      - POSTGRES_DB=gitlabhq_production
+    volumes:
+      - postgres-master-data:/var/lib/postgresql/data
+      - ./init-master.sh:/docker-entrypoint-initdb.d/init-master.sh
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gitlab"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-slave-1:
+    image: postgres:17
+    environment:
+      - POSTGRES_USER=gitlab
+      - POSTGRES_PASSWORD=gitlab_password
+      - POSTGRES_DB=gitlabhq_production
+      - PGUSER=repl_user
+      - PGPASSWORD=repl_password
+      - PRIMARY_HOST=postgres-master
+    volumes:
+      - postgres-slave-1-data:/var/lib/postgresql/data
+      - ./init-slave.sh:/docker-entrypoint-initdb.d/init-slave.sh
+    depends_on:
+      postgres-master:
+        condition: service_healthy
+
+  postgres-slave-2:
+    extends:
+      service: postgres-slave-1
+    volumes:
+      - postgres-slave-2-data:/var/lib/postgresql/data
+      - ./init-slave.sh:/docker-entrypoint-initdb.d/init-slave.sh
+
+  haproxy:
+    image: haproxy:3.0
+    volumes:
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    ports:
+      - "5000:5000"
+      - "5001:5001"
+      - "8404:8404"
+    depends_on:
+      - postgres-master
+      - postgres-slave-1
+      - postgres-slave-2
+
+  redis:
+    image: redis:7.2
+    command: redis-server --requirepass redis_password
+    volumes:
+      - redis-data:/data
+
+  gitlab:
+    image: zengxs/gitlab:17.5.0-ce.0
+    depends_on:
+      - redis
+      - haproxy
+    ports:
+      - "8000:8000"
+      - "443:443"
+      - "22:22"
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url 'http://localhost:8000'
+        
+        gitlab_rails['db_adapter'] = "postgresql"
+        gitlab_rails['db_host'] = "haproxy"
+        gitlab_rails['db_port'] = 5000
+        gitlab_rails['db_username'] = "gitlab"
+        gitlab_rails['db_password'] = "gitlab_password"
+        gitlab_rails['db_database'] = "gitlabhq_production"
+        
+        gitlab_rails['db_load_balancing'] = {
+          'hosts' => ['haproxy:5001']
+        }
+        
+        gitlab_rails['redis_host'] = "redis"
+        gitlab_rails['redis_port'] = 6379
+        gitlab_rails['redis_password'] = "redis_password"
+        
+        postgresql['enable'] = false
+        redis['enable'] = false
+        
+        gitlab_rails['initial_root_password'] = 'insecure-kPe5qrk*pgr6zjf'
+        gitlab_rails['initial_root_email'] = 'admin@local'
+    volumes:
+      - gitlab-config:/etc/gitlab
+      - gitlab-logs:/var/log/gitlab
+      - gitlab-data:/var/opt/gitlab
+    shm_size: '256m'
+
+volumes:
+  postgres-master-data:
+  postgres-slave-1-data:
+  postgres-slave-2-data:
+  redis-data:
+  gitlab-config:
+  gitlab-logs:
+  gitlab-data:
