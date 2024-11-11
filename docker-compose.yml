@@ -1,125 +1,100 @@
 services:
-  traefik:
-    image: traefik:3.2
-    command:
-      - "--api.insecure=true"
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--entrypoints.web.address=:8500"
-      - "--entrypoints.dns.address=:8600"
-    ports:
-      - "8500:8500"
-      - "8600:8600/tcp"
-      - "8600:8600/udp"
-      - "8080:8080"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    networks:
-      - consul-net
-
   haproxy:
     image: haproxy:3.0
     volumes:
-      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg
     ports:
       - "5000:5000"
+      - "8500:8500"
       - "8404:8404"
-    networks:
-      - consul-net
 
   consul1:
     image: consul:1.15
     command: agent -server -bootstrap-expect=3 -ui -node=server-1 -client=0.0.0.0
     volumes:
       - consul1-data:/consul/data
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.consul1.rule=PathPrefix(`/`)"
-      - "traefik.http.routers.consul1.entrypoints=web"
-      - "traefik.http.services.consul1.loadbalancer.server.port=8500"
-      - "traefik.tcp.routers.consul1-dns.rule=HostSNI(`*`)"
-      - "traefik.tcp.routers.consul1-dns.entrypoints=dns"
-      - "traefik.tcp.services.consul1-dns.loadbalancer.server.port=8600"
-    networks:
-      - consul-net
 
   consul2:
     image: consul:1.15
     command: agent -server -bootstrap-expect=3 -ui -node=server-2 -retry-join=consul1 -client=0.0.0.0
     volumes:
       - consul2-data:/consul/data
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.consul2.rule=PathPrefix(`/`)"
-      - "traefik.http.routers.consul2.entrypoints=web"
-      - "traefik.http.services.consul2.loadbalancer.server.port=8500"
-      - "traefik.tcp.routers.consul2-dns.rule=HostSNI(`*`)"
-      - "traefik.tcp.routers.consul2-dns.entrypoints=dns"
-      - "traefik.tcp.services.consul2-dns.loadbalancer.server.port=8600"
     depends_on:
       - consul1
-    networks:
-      - consul-net
 
   consul3:
     image: consul:1.15
     command: agent -server -bootstrap-expect=3 -ui -node=server-3 -retry-join=consul1 -client=0.0.0.0
     volumes:
       - consul3-data:/consul/data
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.consul3.rule=PathPrefix(`/`)"
-      - "traefik.http.routers.consul3.entrypoints=web"
-      - "traefik.http.services.consul3.loadbalancer.server.port=8500"
-      - "traefik.tcp.routers.consul3-dns.rule=HostSNI(`*`)"
-      - "traefik.tcp.routers.consul3-dns.entrypoints=dns"
-      - "traefik.tcp.services.consul3-dns.loadbalancer.server.port=8600"
     depends_on:
       - consul1
-    networks:
-      - consul-net
 
   patroni1:
     image: patroni
+    command: /usr/local/bin/entrypoint.sh /etc/patroni.yml
     volumes:
-      - patroni1:/data/patroni
+      - patroni1-data:/data/patroni
       - ./patroni.yml:/etc/patroni.yml
       - ./entrypoint.sh:/usr/local/bin/entrypoint.sh
-    command: /usr/local/bin/entrypoint.sh /etc/patroni.yml
-    environment:
-      PATRONI_API_CONNECT_PORT: 8091
-      REPLICATION_NAME: replicator
-      REPLICATION_PASS: replpass
-      SU_NAME: postgres
-      SU_PASS: supass
-      POSTGRES_APP_ROLE_PASS: appass
-    networks:
-      - consul-net
+    depends_on:
+      - consul1
 
   patroni2:
     image: patroni
     volumes:
-      - patroni2:/data/patroni
+      - patroni2-data:/data/patroni
       - ./patroni.yml:/etc/patroni.yml
       - ./entrypoint.sh:/usr/local/bin/entrypoint.sh
     command: /usr/local/bin/entrypoint.sh /etc/patroni.yml
-    environment:
-      PATRONI_API_CONNECT_PORT: 8091
-      REPLICATION_NAME: replicator
-      REPLICATION_PASS: replpass
-      SU_NAME: postgres
-      SU_PASS: supass
-      POSTGRES_APP_ROLE_PASS: appass
-    networks:
-      - consul-net
+    depends_on:
+      - consul1
 
-networks:
-  consul-net:
-    driver: bridge
+  redis:
+    image: redis:7.2
+    command: redis-server --requirepass password
+    volumes:
+      - redis-data:/data
+
+  gitlab:
+    image: zengxs/gitlab:17.5.0-ce.0
+    ports:
+      - "8000:8000"
+      - "443:443"
+      - "22:22"
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url 'http://localhost:8000'
+
+        gitlab_rails['db_adapter'] = "postgresql"
+        gitlab_rails['db_host'] = "haproxy"
+        gitlab_rails['db_port'] = 5000
+        gitlab_rails['db_username'] = "postgres"
+        gitlab_rails['db_password'] = "postgres"
+        gitlab_rails['db_database'] = "gitlab"
+
+        gitlab_rails['redis_host'] = "redis"
+        gitlab_rails['redis_port'] = 6379
+        gitlab_rails['redis_password'] = "password"
+
+        postgresql['enable'] = false
+        redis['enable'] = false
+
+        gitlab_rails['initial_root_password'] = 'insecure-kPe5qrk*pgr6zjf'
+        gitlab_rails['initial_root_email'] = 'admin@local'
+    volumes:
+      - gitlab-logs:/var/log/gitlab
+      - gitlab-data:/var/opt/gitlab
+    depends_on:
+      - haproxy
+      - redis
 
 volumes:
   consul1-data:
   consul2-data:
   consul3-data:
-  patroni1:
-  patroni2:
+  patroni1-data:
+  patroni2-data:
+  redis-data:
+  gitlab-logs:
+  gitlab-data:

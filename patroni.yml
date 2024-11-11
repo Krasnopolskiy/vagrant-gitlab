@@ -5,7 +5,8 @@ watchdog:
   mode: off
 
 consul:
-  host: "traefik:8500"
+  host: haproxy:8500
+  register_service: true
 
 postgresql:
   data_dir: /data/patroni
