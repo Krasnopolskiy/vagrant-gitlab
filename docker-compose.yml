@@ -4,9 +4,10 @@ services:
     volumes:
       - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg
     ports:
-      - "5000:5000"
-      - "8500:8500"
       - "8404:8404"
+      - "5432:5432"
+      - "6380:6379"
+      - "8500:8500"
 
   consul1:
     image: consul:1.15
@@ -19,16 +20,12 @@ services:
     command: agent -server -bootstrap-expect=3 -ui -node=server-2 -retry-join=consul1 -client=0.0.0.0
     volumes:
       - consul2-data:/consul/data
-    depends_on:
-      - consul1
 
   consul3:
     image: consul:1.15
     command: agent -server -bootstrap-expect=3 -ui -node=server-3 -retry-join=consul1 -client=0.0.0.0
     volumes:
       - consul3-data:/consul/data
-    depends_on:
-      - consul1
 
   patroni1:
     image: patroni
@@ -37,8 +34,6 @@ services:
       - patroni1-data:/data/patroni
       - ./patroni.yml:/etc/patroni.yml
       - ./entrypoint.sh:/usr/local/bin/entrypoint.sh
-    depends_on:
-      - consul1
 
   patroni2:
     image: patroni
@@ -47,14 +42,36 @@ services:
       - ./patroni.yml:/etc/patroni.yml
       - ./entrypoint.sh:/usr/local/bin/entrypoint.sh
     command: /usr/local/bin/entrypoint.sh /etc/patroni.yml
-    depends_on:
-      - consul1
 
-  redis:
+  sentinel1:
     image: redis:7.2
-    command: redis-server --requirepass password
+    command: redis-sentinel /usr/local/etc/redis/sentinel.conf
     volumes:
-      - redis-data:/data
+      - ./sentinel.conf:/usr/local/etc/redis/sentinel.conf
+
+  sentinel2:
+    image: redis:7.2
+    command: redis-sentinel /usr/local/etc/redis/sentinel.conf
+    volumes:
+      - ./sentinel.conf:/usr/local/etc/redis/sentinel.conf
+
+  sentinel3:
+    image: redis:7.2
+    command: redis-sentinel /usr/local/etc/redis/sentinel.conf
+    volumes:
+      - ./sentinel.conf:/usr/local/etc/redis/sentinel.conf
+
+  redis1:
+    image: redis:7.2
+    command: redis-server --requirepass mypassword --masterauth mypassword
+    volumes:
+      - redis1-data:/data
+
+  redis2:
+    image: redis:7.2
+    command: redis-server --slaveof redis1 6379 --requirepass mypassword --masterauth mypassword
+    volumes:
+      - redis2-data:/data
 
   gitlab:
     image: zengxs/gitlab:17.5.0-ce.0
@@ -68,14 +85,14 @@ services:
 
         gitlab_rails['db_adapter'] = "postgresql"
         gitlab_rails['db_host'] = "haproxy"
-        gitlab_rails['db_port'] = 5000
+        gitlab_rails['db_port'] = 5432
         gitlab_rails['db_username'] = "postgres"
         gitlab_rails['db_password'] = "postgres"
         gitlab_rails['db_database'] = "gitlab"
 
-        gitlab_rails['redis_host'] = "redis"
+        gitlab_rails['redis_host'] = "haproxy"
         gitlab_rails['redis_port'] = 6379
-        gitlab_rails['redis_password'] = "password"
+        gitlab_rails['redis_password'] = "mypassword"
 
         postgresql['enable'] = false
         redis['enable'] = false
@@ -85,9 +102,6 @@ services:
     volumes:
       - gitlab-logs:/var/log/gitlab
       - gitlab-data:/var/opt/gitlab
-    depends_on:
-      - haproxy
-      - redis
 
 volumes:
   consul1-data:
@@ -95,6 +109,7 @@ volumes:
   consul3-data:
   patroni1-data:
   patroni2-data:
-  redis-data:
+  redis1-data:
+  redis2-data:
   gitlab-logs:
   gitlab-data:

@@ -20,7 +20,4 @@ export PATRONI_REPLICATION_PASSWORD="${REPLICATION_PASSWORD:-replicator}"
 export PATRONI_SUPERUSER_USERNAME="${SUPERUSER_USERNAME:-postgres}"
 export PATRONI_SUPERUSER_PASSWORD="${SUPERUSER_PASSWORD:-postgres}"
 
-export PATRONI_gitlab_PASSWORD="${APP_ROLE_PASSWORD:-gitlab}"
-export PATRONI_gitlab_OPTIONS="${PATRONI_admin_OPTIONS:-createdb, createrole}"
-
 exec /usr/local/bin/patroni /etc/patroni.yml
