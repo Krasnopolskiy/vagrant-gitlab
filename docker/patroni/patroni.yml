@@ -5,7 +5,7 @@ watchdog:
   mode: off
 
 consul:
-  host: haproxy:8500
+  host: gateway:8500
   register_service: true
 
 postgresql:

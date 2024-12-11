@@ -11,7 +11,7 @@ register() {
             tr -d '[:space:]'
         )
 
-        CONSUL_SERVICE_ID=$(hostname)
+        CONSUL_SERVICE_ID="${CONSUL_SERVICE_NAME}/$(hostname)"
 
         CONSUL_SERVICE_CHECK='
           {
@@ -36,7 +36,7 @@ register() {
             PAYLOAD=$(echo $PAYLOAD | jq '.Tags = ["'${CONSUL_ROLE}'"]')
         fi
 
-        curl -s -X PUT -d "${PAYLOAD}" http://${CONSUL_HOST}/v1/agent/service/register
+        curl -s -X PUT -d "${PAYLOAD}" "http://${CONSUL_HOST}/v1/agent/service/register"
 
         # Sleep for 30 seconds before next registration attempt
         # This helps maintain registration and handles consul restarts
@@ -48,14 +48,14 @@ deregister() {
     CONSUL_SERVICE_ID=$(hostname)
 
     echo "Deregistering ${CONSUL_SERVICE_ID} from Consul..."
-    curl -s -X PUT http://${CONSUL_HOST}/v1/agent/service/deregister/${CONSUL_SERVICE_ID} > /dev/null
+    curl -s -X PUT "http://${CONSUL_HOST}/v1/agent/service/deregister/${CONSUL_SERVICE_ID}" > /dev/null
     exit 0
 }
 
 # Start registration process in background
 (
     # Wait for Consul to be ready
-    until curl -s http://${CONSUL_HOST}/v1/status/leader > /dev/null; do
+    until curl -s "http://${CONSUL_HOST}/v1/status/leader" > /dev/null; do
         echo "Waiting for Consul to be ready..."
         sleep 1
     done

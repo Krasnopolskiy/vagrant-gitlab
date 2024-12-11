@@ -1,36 +1,56 @@
 services:
-  haproxy:
-    image: haproxy-consul
-    entrypoint: /usr/local/bin/entrypoint.sh
-    command: /usr/local/sbin/haproxy -f /usr/local/etc/haproxy/haproxy.cfg
-    environment:
-      - CONSUL_HOST=consul1:8500
-    volumes:
-      - ./docker/haproxy/haproxy.cfg.ctmpl:/usr/local/etc/haproxy/haproxy.cfg.ctmpl
-      - ./docker/haproxy/entrypoint.sh:/usr/local/bin/entrypoint.sh
+  gateway:
+    image: traefik:v2.10
+    command:
+      - "--api.dashboard=true"
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.postgres.address=:5432"
+      - "--entrypoints.redis.address=:6379"
+      - "--entrypoints.consul.address=:8500"
+      - "--entrypoints.sentinel.address=:26379"
     ports:
-      - "8404:8404"
-      - "5432:5432"
-      - "6380:6379"
-      - "8500:8500"
+      - "8080:8080"  # Dashboard
+      - "5432:5432"  # PostgreSQL
+      - "6380:6379"  # Redis
+      - "8500:8500"  # Consul
+      - "26379:26379" # Sentinel
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
 
   consul1:
     image: consul:1.15
     command: agent -server -bootstrap-expect=3 -ui -node=server-1 -client=0.0.0.0
     volumes:
       - consul1-data:/consul/data
+    labels:
+      - "traefik.enable=true"
+      - "traefik.tcp.routers.consul.rule=HostSNI(`*`)"
+      - "traefik.tcp.routers.consul.entrypoints=consul"
+      - "traefik.tcp.services.consul.loadbalancer.server.port=8500"
 
   consul2:
     image: consul:1.15
     command: agent -server -bootstrap-expect=3 -ui -node=server-2 -retry-join=consul1 -client=0.0.0.0
     volumes:
       - consul2-data:/consul/data
+    labels:
+      - "traefik.enable=true"
+      - "traefik.tcp.routers.consul.rule=HostSNI(`*`)"
+      - "traefik.tcp.routers.consul.entrypoints=consul"
+      - "traefik.tcp.services.consul.loadbalancer.server.port=8500"
 
   consul3:
     image: consul:1.15
     command: agent -server -bootstrap-expect=3 -ui -node=server-3 -retry-join=consul1 -client=0.0.0.0
     volumes:
       - consul3-data:/consul/data
+    labels:
+      - "traefik.enable=true"
+      - "traefik.tcp.routers.consul.rule=HostSNI(`*`)"
+      - "traefik.tcp.routers.consul.entrypoints=consul"
+      - "traefik.tcp.services.consul.loadbalancer.server.port=8500"
 
   patroni1:
     image: patroni
@@ -39,6 +59,13 @@ services:
       - patroni1-data:/data/patroni
       - ./docker/patroni/patroni.yml:/etc/patroni.yml
       - ./docker/patroni/entrypoint.sh:/usr/local/bin/entrypoint.sh
+    labels:
+      - "traefik.enable=true"
+      - "traefik.tcp.routers.postgres.rule=HostSNI(`*`)"
+      - "traefik.tcp.routers.postgres.entrypoints=postgres"
+      - "traefik.tcp.services.postgres.loadbalancer.server.port=5432"
+    depends_on:
+      - consul1
 
   patroni2:
     image: patroni
@@ -47,6 +74,13 @@ services:
       - ./docker/patroni/patroni.yml:/etc/patroni.yml
       - ./docker/patroni/entrypoint.sh:/usr/local/bin/entrypoint.sh
     command: /usr/local/bin/entrypoint.sh /etc/patroni.yml
+    labels:
+      - "traefik.enable=true"
+      - "traefik.tcp.routers.postgres.rule=HostSNI(`*`)"
+      - "traefik.tcp.routers.postgres.entrypoints=postgres"
+      - "traefik.tcp.services.postgres.loadbalancer.server.port=5432"
+    depends_on:
+      - consul1
 
   sentinel1:
     image: redis-consul
@@ -55,10 +89,15 @@ services:
     environment:
       - CONSUL_SERVICE_NAME=sentinel
       - CONSUL_SERVICE_PORT=26379
-      - CONSUL_HOST=haproxy:8500
+      - CONSUL_HOST=gateway:8500
     volumes:
       - ./docker/redis/sentinel.conf:/usr/local/etc/redis/sentinel.conf
       - ./docker/redis/entrypoint.sh:/usr/local/bin/entrypoint.sh
+    labels:
+      - "traefik.enable=true"
+      - "traefik.tcp.routers.sentinel.rule=HostSNI(`*`)"
+      - "traefik.tcp.routers.sentinel.entrypoints=sentinel"
+      - "traefik.tcp.services.sentinel.loadbalancer.server.port=26379"
 
   sentinel2:
     image: redis-consul
@@ -67,10 +106,15 @@ services:
     environment:
       - CONSUL_SERVICE_NAME=sentinel
       - CONSUL_SERVICE_PORT=26379
-      - CONSUL_HOST=haproxy:8500
+      - CONSUL_HOST=gateway:8500
     volumes:
       - ./docker/redis/sentinel.conf:/usr/local/etc/redis/sentinel.conf
       - ./docker/redis/entrypoint.sh:/usr/local/bin/entrypoint.sh
+    labels:
+      - "traefik.enable=true"
+      - "traefik.tcp.routers.sentinel.rule=HostSNI(`*`)"
+      - "traefik.tcp.routers.sentinel.entrypoints=sentinel"
+      - "traefik.tcp.services.sentinel.loadbalancer.server.port=26379"
 
   sentinel3:
     image: redis-consul
@@ -79,10 +123,15 @@ services:
     environment:
       - CONSUL_SERVICE_NAME=sentinel
       - CONSUL_SERVICE_PORT=26379
-      - CONSUL_HOST=haproxy:8500
+      - CONSUL_HOST=gateway:8500
     volumes:
       - ./docker/redis/sentinel.conf:/usr/local/etc/redis/sentinel.conf
       - ./docker/redis/entrypoint.sh:/usr/local/bin/entrypoint.sh
+    labels:
+      - "traefik.enable=true"
+      - "traefik.tcp.routers.sentinel.rule=HostSNI(`*`)"
+      - "traefik.tcp.routers.sentinel.entrypoints=sentinel"
+      - "traefik.tcp.services.sentinel.loadbalancer.server.port=26379"
 
   redis1:
     image: redis-consul
@@ -91,10 +140,15 @@ services:
     environment:
       - CONSUL_SERVICE_NAME=redis
       - CONSUL_SERVICE_PORT=6379
-      - CONSUL_HOST=haproxy:8500
+      - CONSUL_HOST=gateway:8500
     volumes:
       - redis1-data:/data
       - ./docker/redis/entrypoint.sh:/usr/local/bin/entrypoint.sh
+    labels:
+      - "traefik.enable=true"
+      - "traefik.tcp.routers.redis.rule=HostSNI(`*`)"
+      - "traefik.tcp.routers.redis.entrypoints=redis"
+      - "traefik.tcp.services.redis.loadbalancer.server.port=6379"
 
   redis2:
     image: redis-consul
@@ -103,38 +157,15 @@ services:
     environment:
       - CONSUL_SERVICE_NAME=redis
       - CONSUL_SERVICE_PORT=6379
-      - CONSUL_HOST=haproxy:8500
+      - CONSUL_HOST=gateway:8500
     volumes:
       - redis2-data:/data
       - ./docker/redis/entrypoint.sh:/usr/local/bin/entrypoint.sh
-
-#  gitlab:
-#    image: zengxs/gitlab:17.5.0-ce.0
-#    ports:
-#      - "8000:8000"
-#    environment:
-#      GITLAB_OMNIBUS_CONFIG: |
-#        external_url 'http://localhost:8000'
-#
-#        gitlab_rails['db_adapter'] = "postgresql"
-#        gitlab_rails['db_host'] = "haproxy"
-#        gitlab_rails['db_port'] = 5432
-#        gitlab_rails['db_username'] = "postgres"
-#        gitlab_rails['db_password'] = "postgres"
-#        gitlab_rails['db_database'] = "gitlab"
-#
-#        gitlab_rails['redis_host'] = "haproxy"
-#        gitlab_rails['redis_port'] = 6379
-#        gitlab_rails['redis_password'] = "mypassword"
-#
-#        postgresql['enable'] = false
-#        redis['enable'] = false
-#
-#        gitlab_rails['initial_root_password'] = 'insecure-kPe5qrk*pgr6zjf'
-#        gitlab_rails['initial_root_email'] = 'admin@local'
-#    volumes:
-#      - gitlab-logs:/var/log/gitlab
-#      - gitlab-data:/var/opt/gitlab
+    labels:
+      - "traefik.enable=true"
+      - "traefik.tcp.routers.redis.rule=HostSNI(`*`)"
+      - "traefik.tcp.routers.redis.entrypoints=redis"
+      - "traefik.tcp.services.redis.loadbalancer.server.port=6379"
 
 volumes:
   consul1-data:
