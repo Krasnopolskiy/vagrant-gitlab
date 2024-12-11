@@ -1,8 +1,13 @@
 services:
   haproxy:
-    image: haproxy:3.0
+    image: haproxy-consul
+    entrypoint: /usr/local/bin/entrypoint.sh
+    command: /usr/local/sbin/haproxy -f /usr/local/etc/haproxy/haproxy.cfg
+    environment:
+      - CONSUL_HOST=consul1:8500
     volumes:
-      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg
+      - ./docker/haproxy/haproxy.cfg.ctmpl:/usr/local/etc/haproxy/haproxy.cfg.ctmpl
+      - ./docker/haproxy/entrypoint.sh:/usr/local/bin/entrypoint.sh
     ports:
       - "8404:8404"
       - "5432:5432"
@@ -32,76 +37,104 @@ services:
     command: /usr/local/bin/entrypoint.sh /etc/patroni.yml
     volumes:
       - patroni1-data:/data/patroni
-      - ./patroni.yml:/etc/patroni.yml
-      - ./entrypoint.sh:/usr/local/bin/entrypoint.sh
+      - ./docker/patroni/patroni.yml:/etc/patroni.yml
+      - ./docker/patroni/entrypoint.sh:/usr/local/bin/entrypoint.sh
 
   patroni2:
     image: patroni
     volumes:
       - patroni2-data:/data/patroni
-      - ./patroni.yml:/etc/patroni.yml
-      - ./entrypoint.sh:/usr/local/bin/entrypoint.sh
+      - ./docker/patroni/patroni.yml:/etc/patroni.yml
+      - ./docker/patroni/entrypoint.sh:/usr/local/bin/entrypoint.sh
     command: /usr/local/bin/entrypoint.sh /etc/patroni.yml
 
   sentinel1:
-    image: redis:7.2
+    image: redis-consul
     command: redis-sentinel /usr/local/etc/redis/sentinel.conf
+    entrypoint: /usr/local/bin/entrypoint.sh
+    environment:
+      - CONSUL_SERVICE_NAME=sentinel
+      - CONSUL_SERVICE_PORT=26379
+      - CONSUL_HOST=haproxy:8500
     volumes:
-      - ./sentinel.conf:/usr/local/etc/redis/sentinel.conf
+      - ./docker/redis/sentinel.conf:/usr/local/etc/redis/sentinel.conf
+      - ./docker/redis/entrypoint.sh:/usr/local/bin/entrypoint.sh
 
   sentinel2:
-    image: redis:7.2
+    image: redis-consul
     command: redis-sentinel /usr/local/etc/redis/sentinel.conf
+    entrypoint: /usr/local/bin/entrypoint.sh
+    environment:
+      - CONSUL_SERVICE_NAME=sentinel
+      - CONSUL_SERVICE_PORT=26379
+      - CONSUL_HOST=haproxy:8500
     volumes:
-      - ./sentinel.conf:/usr/local/etc/redis/sentinel.conf
+      - ./docker/redis/sentinel.conf:/usr/local/etc/redis/sentinel.conf
+      - ./docker/redis/entrypoint.sh:/usr/local/bin/entrypoint.sh
 
   sentinel3:
-    image: redis:7.2
+    image: redis-consul
     command: redis-sentinel /usr/local/etc/redis/sentinel.conf
+    entrypoint: /usr/local/bin/entrypoint.sh
+    environment:
+      - CONSUL_SERVICE_NAME=sentinel
+      - CONSUL_SERVICE_PORT=26379
+      - CONSUL_HOST=haproxy:8500
     volumes:
-      - ./sentinel.conf:/usr/local/etc/redis/sentinel.conf
+      - ./docker/redis/sentinel.conf:/usr/local/etc/redis/sentinel.conf
+      - ./docker/redis/entrypoint.sh:/usr/local/bin/entrypoint.sh
 
   redis1:
-    image: redis:7.2
+    image: redis-consul
     command: redis-server --requirepass mypassword --masterauth mypassword
+    entrypoint: /usr/local/bin/entrypoint.sh
+    environment:
+      - CONSUL_SERVICE_NAME=redis
+      - CONSUL_SERVICE_PORT=6379
+      - CONSUL_HOST=haproxy:8500
     volumes:
       - redis1-data:/data
+      - ./docker/redis/entrypoint.sh:/usr/local/bin/entrypoint.sh
 
   redis2:
-    image: redis:7.2
+    image: redis-consul
     command: redis-server --slaveof redis1 6379 --requirepass mypassword --masterauth mypassword
+    entrypoint: /usr/local/bin/entrypoint.sh
+    environment:
+      - CONSUL_SERVICE_NAME=redis
+      - CONSUL_SERVICE_PORT=6379
+      - CONSUL_HOST=haproxy:8500
     volumes:
       - redis2-data:/data
+      - ./docker/redis/entrypoint.sh:/usr/local/bin/entrypoint.sh
 
-  gitlab:
-    image: zengxs/gitlab:17.5.0-ce.0
-    ports:
-      - "8000:8000"
-      - "443:443"
-      - "22:22"
-    environment:
-      GITLAB_OMNIBUS_CONFIG: |
-        external_url 'http://localhost:8000'
-
-        gitlab_rails['db_adapter'] = "postgresql"
-        gitlab_rails['db_host'] = "haproxy"
-        gitlab_rails['db_port'] = 5432
-        gitlab_rails['db_username'] = "postgres"
-        gitlab_rails['db_password'] = "postgres"
-        gitlab_rails['db_database'] = "gitlab"
-
-        gitlab_rails['redis_host'] = "haproxy"
-        gitlab_rails['redis_port'] = 6379
-        gitlab_rails['redis_password'] = "mypassword"
-
-        postgresql['enable'] = false
-        redis['enable'] = false
-
-        gitlab_rails['initial_root_password'] = 'insecure-kPe5qrk*pgr6zjf'
-        gitlab_rails['initial_root_email'] = 'admin@local'
-    volumes:
-      - gitlab-logs:/var/log/gitlab
-      - gitlab-data:/var/opt/gitlab
+#  gitlab:
+#    image: zengxs/gitlab:17.5.0-ce.0
+#    ports:
+#      - "8000:8000"
+#    environment:
+#      GITLAB_OMNIBUS_CONFIG: |
+#        external_url 'http://localhost:8000'
+#
+#        gitlab_rails['db_adapter'] = "postgresql"
+#        gitlab_rails['db_host'] = "haproxy"
+#        gitlab_rails['db_port'] = 5432
+#        gitlab_rails['db_username'] = "postgres"
+#        gitlab_rails['db_password'] = "postgres"
+#        gitlab_rails['db_database'] = "gitlab"
+#
+#        gitlab_rails['redis_host'] = "haproxy"
+#        gitlab_rails['redis_port'] = 6379
+#        gitlab_rails['redis_password'] = "mypassword"
+#
+#        postgresql['enable'] = false
+#        redis['enable'] = false
+#
+#        gitlab_rails['initial_root_password'] = 'insecure-kPe5qrk*pgr6zjf'
+#        gitlab_rails['initial_root_email'] = 'admin@local'
+#    volumes:
+#      - gitlab-logs:/var/log/gitlab
+#      - gitlab-data:/var/opt/gitlab
 
 volumes:
   consul1-data:
