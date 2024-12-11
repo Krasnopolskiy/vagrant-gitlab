@@ -24,16 +24,28 @@ register() {
 
         PAYLOAD='
           {
-            "Name": "'${CONSUL_SERVICE_NAME}'",
             "ID": "'${CONSUL_SERVICE_ID}'",
+            "Name": "'${CONSUL_SERVICE_NAME}'",
+            "Address": "'$(hostname --ip-address)'",
             "Port": '${CONSUL_SERVICE_PORT}',
             "Check": '${CONSUL_SERVICE_CHECK}',
-            "EnableTagOverride": true
+            "EnableTagOverride": true,
+            "Tags": []
           }
         '
 
-        if [ -n "${CONSUL_ROLE}" ]; then
-            PAYLOAD=$(echo $PAYLOAD | jq '.Tags = ["'${CONSUL_ROLE}'"]')
+        if [ "${CONSUL_SERVICE_NAME}" = "sentinel" ]; then
+            PAYLOAD=$(echo $PAYLOAD | jq '.Tags += ["traefik.tcp.routers.sentinel.rule=HostSNI(`*`)"]')
+            PAYLOAD=$(echo $PAYLOAD | jq '.Tags += ["traefik.tcp.routers.sentinel.entrypoints=sentinel"]')
+            PAYLOAD=$(echo $PAYLOAD | jq '.Tags += ["traefik.tcp.services.sentinel.loadbalancer.server.port=26379"]')
+            PAYLOAD=$(echo $PAYLOAD | jq '.Tags += ["master"]')
+        elif [ "${CONSUL_SERVICE_NAME}" = "redis" ]; then
+            PAYLOAD=$(echo $PAYLOAD | jq '.Tags += ["traefik.tcp.routers.redis.rule=HostSNI(`*`)"]')
+            PAYLOAD=$(echo $PAYLOAD | jq '.Tags += ["traefik.tcp.routers.redis.entrypoints=redis"]')
+            PAYLOAD=$(echo $PAYLOAD | jq '.Tags += ["traefik.tcp.services.redis.loadbalancer.server.port=6379"]')
+            if [ -n "${CONSUL_ROLE}" ]; then
+                PAYLOAD=$(echo $PAYLOAD | jq '.Tags += ["'${CONSUL_ROLE}'"]')
+            fi
         fi
 
         curl -s -X PUT -d "${PAYLOAD}" "http://${CONSUL_HOST}/v1/agent/service/register"

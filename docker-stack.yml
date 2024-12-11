@@ -1,0 +1,161 @@
+version: '3.8'
+
+services:
+  gateway:
+    image: traefik:v2.10
+    command:
+      - "--configFile=/traefik.yml"
+    ports:
+      - "8080:8080"  # Dashboard
+      - "5432:5432"  # PostgreSQL
+      - "6380:6379"  # Redis
+      - "8500:8500"  # Consul
+      - "26379:26379" # Sentinel
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./docker/traefik/traefik.yml:/traefik.yml
+    networks:
+      - internal
+    depends_on:
+      - consul
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+
+  consul:
+    image: consul:1.15
+    command: agent -server -bootstrap-expect=3 -ui -client=0.0.0.0 -retry-join=tasks.consul
+    environment:
+      - CONSUL_BIND_INTERFACE=eth0
+    networks:
+      - internal
+    deploy:
+      replicas: 3
+      placement:
+        constraints:
+          - node.role == manager
+        max_replicas_per_node: 3
+    labels:
+      - "traefik.enable=true"
+      - "traefik.tcp.routers.consul.rule=HostSNI(`*`)"
+      - "traefik.tcp.routers.consul.entrypoints=consul"
+      - "traefik.tcp.services.consul.loadbalancer.server.port=8500"
+
+  patroni:
+    image: ghcr.io/krasnopolskiy/patroni:latest
+    command: /usr/local/bin/entrypoint.sh /etc/patroni.yml
+    volumes:
+      - ./docker/patroni/patroni.yml:/etc/patroni.yml
+      - ./docker/patroni/entrypoint.sh:/usr/local/bin/entrypoint.sh
+    networks:
+      - internal
+    depends_on:
+      - consul
+    deploy:
+      replicas: 2
+      placement:
+        constraints:
+          - node.role == manager
+#          - node.role == worker
+        max_replicas_per_node: 3
+
+  sentinel:
+    image: ghcr.io/krasnopolskiy/redis-consul:latest
+    command: redis-sentinel /usr/local/etc/redis/sentinel.conf
+    entrypoint: /usr/local/bin/entrypoint.sh
+    environment:
+      - CONSUL_SERVICE_NAME=sentinel
+      - CONSUL_SERVICE_PORT=26379
+      - CONSUL_HOST=gateway:8500
+    volumes:
+      - ./docker/redis/sentinel.conf:/usr/local/etc/redis/sentinel.conf
+      - ./docker/redis/entrypoint.sh:/usr/local/bin/entrypoint.sh
+    networks:
+      - internal
+    deploy:
+      replicas: 3
+      placement:
+        constraints:
+          - node.role == manager
+#          - node.role == worker
+        max_replicas_per_node: 3
+
+  redis-master:
+    image: ghcr.io/krasnopolskiy/redis-consul
+    command: redis-server --requirepass mypassword --masterauth mypassword
+    entrypoint: /usr/local/bin/entrypoint.sh
+    environment:
+      - CONSUL_SERVICE_NAME=redis
+      - CONSUL_SERVICE_PORT=6379
+      - CONSUL_HOST=gateway:8500
+    volumes:
+      - ./docker/redis/entrypoint.sh:/usr/local/bin/entrypoint.sh
+    networks:
+      - internal
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+#          - node.role == worker
+        max_replicas_per_node: 3
+
+  redis-replica:
+    image: ghcr.io/krasnopolskiy/redis-consul
+    command: redis-server --slaveof redis-master 6379 --requirepass mypassword --masterauth mypassword
+    entrypoint: /usr/local/bin/entrypoint.sh
+    environment:
+      - CONSUL_SERVICE_NAME=redis
+      - CONSUL_SERVICE_PORT=6379
+      - CONSUL_HOST=gateway:8500
+    volumes:
+      - ./docker/redis/entrypoint.sh:/usr/local/bin/entrypoint.sh
+    networks:
+      - internal
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+#          - node.role == worker
+        max_replicas_per_node: 3
+
+#  gitlab:
+#    image: zengxs/gitlab:17.5.0-ce.0
+#    ports:
+#      - "8000:8000"
+#    environment:
+#      GITLAB_OMNIBUS_CONFIG: |
+#        external_url 'http://localhost:8000'
+#
+#        gitlab_rails['db_adapter'] = "postgresql"
+#        gitlab_rails['db_host'] = "gateway"
+#        gitlab_rails['db_port'] = 5432
+#        gitlab_rails['db_username'] = "postgres"
+#        gitlab_rails['db_password'] = "postgres"
+#        gitlab_rails['db_database'] = "gitlab"
+#
+#        gitlab_rails['redis_host'] = "gateway"
+#        gitlab_rails['redis_port'] = 6379
+#        gitlab_rails['redis_password'] = "mypassword"
+#
+#        postgresql['enable'] = false
+#        redis['enable'] = false
+#
+#        gitlab_rails['initial_root_password'] = 'insecure-kPe5qrk*pgr6zjf'
+#        gitlab_rails['initial_root_email'] = 'admin@local'
+#    networks:
+#      - internal
+#    deploy:
+#      replicas: 1
+#      placement:
+#        constraints:
+#          - node.role == manager
+#        max_replicas_per_node: 1
+
+networks:
+  internal:
+    driver: overlay
+    attachable: true

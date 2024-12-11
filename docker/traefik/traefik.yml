@@ -1,0 +1,29 @@
+api:
+  dashboard: true
+  insecure: true
+
+entryPoints:
+  postgres:
+    address: ":5432"
+  redis:
+    address: ":6379"
+  consul:
+    address: ":8500"
+  sentinel:
+    address: ":26379"
+
+providers:
+  docker:
+    exposedByDefault: false
+  consulCatalog:
+    endpoint:
+      address: "tasks.consul:8500"
+    constraints: "Tag(`master`)"
+    prefix: "traefik"
+    exposedByDefault: true
+
+log:
+  level: INFO
+
+global:
+  sendAnonymousUsage: false

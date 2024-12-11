@@ -7,6 +7,10 @@ watchdog:
 consul:
   host: gateway:8500
   register_service: true
+  service_tags:
+    - "traefik.tcp.routers.postgres.rule=HostSNI(`*`)"
+    - "traefik.tcp.routers.postgres.entrypoints=postgres"
+    - "traefik.tcp.services.postgres.loadbalancer.server.port=5432"
 
 postgresql:
   data_dir: /data/patroni
