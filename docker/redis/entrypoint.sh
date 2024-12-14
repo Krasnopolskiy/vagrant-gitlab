@@ -2,14 +2,38 @@
 
 set -e
 
+configure_redis() {
+    # Get all redis nodes
+    REDIS_NODES=$(curl -s "http://${CONSUL_HOST}/v1/catalog/service/redis" | jq -r '.[].ServiceAddress' | sort)
+
+    # Get our own IP
+    OWN_IP=$(hostname --ip-address)
+
+    # Determine master based on lexicographically first IP
+    MASTER_NODE=$(echo "$REDIS_NODES" | head -n1)
+
+    if [ -z "$MASTER_NODE" ]; then
+        echo "No master node found. Waiting..."
+        return
+    fi
+
+    if [ "$OWN_IP" = "$MASTER_NODE" ]; then
+        echo "This node has the lowest IP. Configuring as master..."
+        redis-cli -a mypassword --no-auth-warning SLAVEOF NO ONE
+        CONSUL_ROLE="master"
+    else
+        echo "Node $MASTER_NODE should be master. Configuring as slave..."
+        redis-cli -a mypassword --no-auth-warning SLAVEOF $MASTER_NODE 6379
+        CONSUL_ROLE="slave"
+    fi
+}
+
 register() {
     while true; do
-        CONSUL_ROLE=$(
-          redis-cli -a mypassword --no-auth-warning info replication |
-            grep "role:" |
-            cut -d: -f2 |
-            tr -d '[:space:]'
-        )
+        # Проверяем и настраиваем роль Redis перед регистрацией
+        if [ "${CONSUL_SERVICE_NAME}" = "redis" ]; then
+            configure_redis
+        fi
 
         CONSUL_SERVICE_ID="${CONSUL_SERVICE_NAME}/$(hostname)"
 
@@ -43,15 +67,11 @@ register() {
             PAYLOAD=$(echo $PAYLOAD | jq '.Tags += ["traefik.tcp.routers.redis.rule=HostSNI(`*`)"]')
             PAYLOAD=$(echo $PAYLOAD | jq '.Tags += ["traefik.tcp.routers.redis.entrypoints=redis"]')
             PAYLOAD=$(echo $PAYLOAD | jq '.Tags += ["traefik.tcp.services.redis.loadbalancer.server.port=6379"]')
-            if [ -n "${CONSUL_ROLE}" ]; then
-                PAYLOAD=$(echo $PAYLOAD | jq '.Tags += ["'${CONSUL_ROLE}'"]')
-            fi
+            PAYLOAD=$(echo $PAYLOAD | jq '.Tags += ["'${CONSUL_ROLE}'"]')
         fi
 
         curl -s -X PUT -d "${PAYLOAD}" "http://${CONSUL_HOST}/v1/agent/service/register"
 
-        # Sleep for 30 seconds before next registration attempt
-        # This helps maintain registration and handles consul restarts
         sleep 30
     done
 }

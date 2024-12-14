@@ -82,7 +82,7 @@ services:
 #          - node.role == worker
         max_replicas_per_node: 3
 
-  redis-master:
+  redis:
     image: ghcr.io/krasnopolskiy/redis-consul
     command: redis-server --requirepass mypassword --masterauth mypassword
     entrypoint: /usr/local/bin/entrypoint.sh
@@ -95,27 +95,7 @@ services:
     networks:
       - internal
     deploy:
-      replicas: 1
-      placement:
-        constraints:
-          - node.role == manager
-#          - node.role == worker
-        max_replicas_per_node: 3
-
-  redis-replica:
-    image: ghcr.io/krasnopolskiy/redis-consul
-    command: redis-server --slaveof redis-master 6379 --requirepass mypassword --masterauth mypassword
-    entrypoint: /usr/local/bin/entrypoint.sh
-    environment:
-      - CONSUL_SERVICE_NAME=redis
-      - CONSUL_SERVICE_PORT=6379
-      - CONSUL_HOST=gateway:8500
-    volumes:
-      - ./docker/redis/entrypoint.sh:/usr/local/bin/entrypoint.sh
-    networks:
-      - internal
-    deploy:
-      replicas: 1
+      replicas: 2
       placement:
         constraints:
           - node.role == manager
