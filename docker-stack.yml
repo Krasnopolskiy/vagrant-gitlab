@@ -23,6 +23,12 @@ services:
       placement:
         constraints:
           - node.role == manager
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   consul:
     image: consul:1.15
@@ -42,6 +48,12 @@ services:
       - "traefik.tcp.routers.consul.rule=HostSNI(`*`)"
       - "traefik.tcp.routers.consul.entrypoints=consul"
       - "traefik.tcp.services.consul.loadbalancer.server.port=8500"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8500/v1/status/leader"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   patroni:
     image: ghcr.io/krasnopolskiy/patroni:latest
@@ -60,6 +72,12 @@ services:
           - node.role == manager
 #          - node.role == worker
         max_replicas_per_node: 3
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
 
   sentinel:
     image: ghcr.io/krasnopolskiy/redis-consul:latest
@@ -74,13 +92,20 @@ services:
       - ./docker/redis/entrypoint.sh:/usr/local/bin/entrypoint.sh
     networks:
       - internal
+    depends_on:
+      - consul
     deploy:
       replicas: 3
       placement:
         constraints:
           - node.role == manager
-#          - node.role == worker
         max_replicas_per_node: 3
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "26379", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   redis:
     image: ghcr.io/krasnopolskiy/redis-consul
@@ -94,6 +119,8 @@ services:
       - ./docker/redis/entrypoint.sh:/usr/local/bin/entrypoint.sh
     networks:
       - internal
+    depends_on:
+      - consul
     deploy:
       replicas: 2
       placement:
@@ -101,39 +128,32 @@ services:
           - node.role == manager
 #          - node.role == worker
         max_replicas_per_node: 3
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "mypassword", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
-#  gitlab:
-#    image: zengxs/gitlab:17.5.0-ce.0
-#    ports:
-#      - "8000:8000"
-#    environment:
-#      GITLAB_OMNIBUS_CONFIG: |
-#        external_url 'http://localhost:8000'
-#
-#        gitlab_rails['db_adapter'] = "postgresql"
-#        gitlab_rails['db_host'] = "gateway"
-#        gitlab_rails['db_port'] = 5432
-#        gitlab_rails['db_username'] = "postgres"
-#        gitlab_rails['db_password'] = "postgres"
-#        gitlab_rails['db_database'] = "gitlab"
-#
-#        gitlab_rails['redis_host'] = "gateway"
-#        gitlab_rails['redis_port'] = 6379
-#        gitlab_rails['redis_password'] = "mypassword"
-#
-#        postgresql['enable'] = false
-#        redis['enable'] = false
-#
-#        gitlab_rails['initial_root_password'] = 'insecure-kPe5qrk*pgr6zjf'
-#        gitlab_rails['initial_root_email'] = 'admin@local'
-#    networks:
-#      - internal
-#    deploy:
-#      replicas: 1
-#      placement:
-#        constraints:
-#          - node.role == manager
-#        max_replicas_per_node: 1
+  gitlab:
+    image: zengxs/gitlab:17.5.0-ce.0
+    ports:
+      - "8000:8000"
+    networks:
+      - internal
+    volumes:
+      - ./docker/gitlab/gitlab.rb:/etc/gitlab/gitlab.rb
+    depends_on:
+      - patroni
+      - redis
+      - gateway
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+#          - node.role == worker
+        max_replicas_per_node: 3
 
 networks:
   internal:

@@ -6,8 +6,8 @@
     - docker
     - swarm
 
-- name: Deploy GitLab
-  become: true
-  hosts: leader
-  roles:
-    - gitlab
+#- name: Deploy GitLab
+#  become: true
+#  hosts: leader
+#  roles:
+#    - gitlab
