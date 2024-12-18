@@ -1,0 +1,15 @@
+external_url 'http://{{ gitlab.external_url }}'
+
+gitlab_rails['db_adapter'] = "postgresql"
+gitlab_rails['db_host'] = "gateway"
+gitlab_rails['db_port'] = 5432
+gitlab_rails['db_username'] = "{{ postgres.username }}"
+gitlab_rails['db_password'] = "{{ postgres.password }}"
+gitlab_rails['db_database'] = "gitlab"
+
+gitlab_rails['redis_host'] = "gateway"
+gitlab_rails['redis_port'] = 6379
+gitlab_rails['redis_password'] = "{{ redis.password }}"
+
+postgresql['enable'] = false
+redis['enable'] = false

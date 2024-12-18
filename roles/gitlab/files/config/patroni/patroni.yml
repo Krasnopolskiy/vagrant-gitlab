@@ -35,6 +35,8 @@ bootstrap:
     - encoding: UTF8
     - data-checksums
 
+  post_init: psql -f /data/initdb/01-create-tables.sql
+
   pg_hba:
     - host replication all all md5
     - host all all all md5

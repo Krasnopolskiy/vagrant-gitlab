@@ -1,0 +1,16 @@
+---
+address: "localhost:/gfs"
+options: "defaults,_netdev"
+brick_dir: /gfs/bricks/gitlab
+cluster: >
+  {{
+    (groups['managers'] + groups['workers'] + groups['leader'])
+    | map('extract', hostvars, ['ansible_default_ipv4', 'address'])
+    | list
+  }}
+peers: >
+  {{
+    (groups['managers'] + groups['workers'])
+    | map('extract', hostvars, ['ansible_default_ipv4', 'address'])
+    | list
+  }}

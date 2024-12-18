@@ -1,0 +1,53 @@
+---
+- name: Install GlusterFS server
+  apt:
+    name: glusterfs-server
+    state: present
+
+- name: Enable and start GlusterFS service
+  systemd:
+    name: glusterd
+    state: started
+    enabled: true
+
+- name: Initialize peers
+  gluster_peer:
+    state: present
+    nodes: "{{ peers }}"
+  when: inventory_hostname == 'leader'
+
+- name: Create directory for GlusterFS brick
+  file:
+    path: "{{ brick_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Initialize volume
+  import_tasks:
+    file: volume.yml
+  when: inventory_hostname == 'leader'
+
+- name: Create directory for mount point
+  file:
+    path: "{{ gfs.mount_point }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Ensure fstab entry exists
+  lineinfile:
+    path: /etc/fstab
+    line: "{{ address }} {{ gfs.mount_point }} glusterfs {{ options }}"
+    state: present
+    create: yes
+
+- name: Mount GlusterFS volume
+  mount:
+    path: "{{ gfs.mount_point }}"
+    src: "{{ address }}"
+    fstype: glusterfs
+    opts: "{{ options }}"
+    state: mounted

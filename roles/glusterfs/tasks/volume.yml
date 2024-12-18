@@ -1,0 +1,22 @@
+---
+- name: Create GlusterFS volume
+  gluster_volume:
+    state: present
+    name: "{{ gfs.volume }}"
+    brick: "{{ brick_dir }}"
+    replicas: "{{ cluster | length }}"
+    cluster: "{{ cluster }}"
+    force: true
+  run_once: true
+
+- name: Start GlusterFS volume
+  gluster_volume:
+    state: started
+    name: "{{ gfs.volume }}"
+
+- name: Initialize performance translators
+  gluster_volume:
+    state: present
+    name: "{{ gfs.volume }}"
+    options:
+        performance.stat-prefetch: 'off'

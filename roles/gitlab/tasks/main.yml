@@ -12,17 +12,47 @@
     group: root
     mode: '0755'
 
-- name: Copy GitLab stack file
+- name: Sync docker-stack files
+  synchronize:
+    src: .
+    dest: "{{ stack_dir }}"
+    dirs: yes
+    owner: no
+    group: no
+
+- name: Copy docker-stack.yml file from template
   template:
-    src: docker-compose.yml.j2
-    dest: "{{ compose_file }}"
+    src: docker-stack.yml.j2
+    dest: "{{ stack_dir }}/docker-stack.yml"
+
+- name: Copy gitlab.rb file from template
+  template:
+    src: config/gitlab/gitlab.rb.j2
+    dest: "{{ stack_dir }}/config/gitlab/gitlab.rb"
+
+- name: Login to docker registry
+  community.docker.docker_login:
+    username: "{{ registry.username }}"
+    password: "{{ registry.password }}"
+    registry_url: "{{ registry.url }}"
+
+- name: Pull docker images
+  community.docker.docker_image_pull:
+    name: "{{ item.value }}"
+  with_dict: "{{ images }}"
+
+- name: Create directory for GitLab data
+  file:
+    path: "/mnt/glusterfs/gfs/gitlab"
+    state: directory
     owner: root
     group: root
-    mode: '0644'
+    mode: '0755'
 
 - name: Deploy GitLab stack
   community.docker.docker_stack:
     name: gitlab
     state: present
     compose:
-      - "{{ compose_file }}"
+      - "{{ stack_file }}"
+  when: inventory_hostname == 'leader'

@@ -11,4 +11,6 @@ RUN pip3 install --upgrade --break-system-packages \
     psycopg2-binary \
     patroni[consul]
 
+RUN chown -R postgres:postgres /data
+
 USER postgres

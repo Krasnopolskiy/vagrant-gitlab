@@ -22,6 +22,8 @@ providers:
     prefix: "traefik"
     exposedByDefault: true
 
+ping: {}
+
 log:
   level: INFO
 

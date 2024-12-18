@@ -1,0 +1,29 @@
+---
+gfs:
+  volume: gfs
+  mount_point: /mnt/glusterfs/gfs
+
+redis:
+  password: insecure-EBD.mnm*gky4rmw
+
+postgres:
+  username: postgres
+  password: insecure-reb#UYQ5zxpwqyf
+
+gitlab:
+  external_url: http://gitlab.local
+  root_email: admin@gitlab.local
+  root_password: insecure-kPe5qrk*pgr6zjf
+
+registry:
+  username: johndoe
+  password: insecure-xkb4CAZ4fwk!kag
+  url: ghcr.io
+
+images:
+  traefik: "traefik:v2.10"
+  consul: "consul:1.15"
+  sentinel: "ghcr.io/username/redis-consul:latest"
+  patroni: "ghcr.io/username/patroni:latest"
+  redis: "ghcr.io/username/redis-consul:latest"
+  gitlab: "zengxs/gitlab:17.6-ce"

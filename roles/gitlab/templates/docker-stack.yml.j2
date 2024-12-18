@@ -1,0 +1,147 @@
+version: '3.8'
+
+services:
+  gateway:
+    image: {{ images.traefik }}
+    command:
+      - "--configFile=/traefik.yml"
+    ports:
+      - "8080:8080"   # Dashboard
+      - "5432:5432"   # PostgreSQL
+      - "6379:6379"   # Redis
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./config/traefik/traefik.yml:/traefik.yml
+    networks:
+      - internal
+    depends_on:
+      - consul
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+          - node.hostname == leader
+        max_replicas_per_node: 1
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  consul:
+    image: {{ images.consul }}
+    command: agent -server -bootstrap-expect=3 -ui -client=0.0.0.0 -retry-join=tasks.consul
+    environment:
+      - CONSUL_BIND_INTERFACE=eth0
+    networks:
+      - internal
+    ports:
+      - "8500:8500"
+    deploy:
+      replicas: 3
+      placement:
+        constraints:
+          - node.role == manager
+        max_replicas_per_node: 1
+    labels:
+      - "traefik.enable=true"
+      - "traefik.tcp.routers.consul.rule=HostSNI(`*`)"
+      - "traefik.tcp.routers.consul.entrypoints=consul"
+      - "traefik.tcp.services.consul.loadbalancer.server.port=8500"
+
+  sentinel:
+    image: {{ images.sentinel }}
+    command: redis-sentinel /usr/local/etc/redis/sentinel.conf
+    entrypoint: /usr/local/bin/entrypoint.sh
+    environment:
+      - CONSUL_SERVICE_NAME=sentinel
+      - CONSUL_SERVICE_PORT=26379
+      - CONSUL_HOST=gateway:8500
+      - REDIS_PASSWORD="{{ redis.password }}"
+    volumes:
+      - ./config/redis/sentinel.conf:/usr/local/etc/redis/sentinel.conf
+      - ./config/redis/entrypoint.sh:/usr/local/bin/entrypoint.sh
+    networks:
+      - internal
+    depends_on:
+      - consul
+    deploy:
+      replicas: 3
+      placement:
+        constraints:
+          - node.role == manager
+        max_replicas_per_node: 1
+
+  patroni:
+    image: {{ images.patroni }}
+    command: /usr/local/bin/entrypoint.sh /etc/patroni.yml
+    environment:
+      - SUPERUSER_USERNAME={{ postgres.username }}
+      - SUPERUSER_PASSWORD={{ postgres.password }}
+    volumes:
+      - ./config/patroni/patroni.yml:/etc/patroni.yml
+      - ./config/patroni/entrypoint.sh:/usr/local/bin/entrypoint.sh
+      - ./config/patroni/initdb:/data/initdb
+    networks:
+      - internal
+    depends_on:
+      - consul
+    deploy:
+      replicas: 2
+      placement:
+        constraints:
+          - node.role == worker
+        max_replicas_per_node: 1
+
+  redis:
+    image: {{ images.redis }}
+    command: redis-server --requirepass "{{ redis.password }}" --masterauth "{{ redis.password }}"
+    entrypoint: /usr/local/bin/entrypoint.sh
+    environment:
+      - CONSUL_SERVICE_NAME=redis
+      - CONSUL_SERVICE_PORT=6379
+      - CONSUL_HOST=gateway:8500
+    volumes:
+      - ./config/redis/entrypoint.sh:/usr/local/bin/entrypoint.sh
+    networks:
+      - internal
+    depends_on:
+      - consul
+    deploy:
+      replicas: 2
+      placement:
+        constraints:
+          - node.role == worker
+        max_replicas_per_node: 1
+
+  gitlab:
+    image: {{ images.gitlab }}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "22:22"
+    networks:
+      - internal
+    volumes:
+      - ./config/gitlab/gitlab.rb:/etc/gitlab/gitlab.rb
+      - {{ gfs.mount_point }}/gitlab:/var/opt/gitlab
+    environment:
+      - GITLAB_ROOT_EMAIL={{ gitlab.root_email }}
+      - GITLAB_ROOT_PASSWORD={{ gitlab.root_password }}
+    depends_on:
+      - patroni
+      - redis
+      - gateway
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == worker
+        max_replicas_per_node: 1
+
+networks:
+  internal:
+    driver: overlay
+    attachable: true
