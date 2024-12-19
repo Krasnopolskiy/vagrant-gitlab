@@ -11,6 +11,8 @@ entryPoints:
     address: ":8500"
   sentinel:
     address: ":26379"
+  ssh:
+    address: ":2222"
 
 providers:
   docker:

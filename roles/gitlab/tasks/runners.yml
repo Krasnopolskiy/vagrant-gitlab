@@ -1,0 +1,56 @@
+---
+- name: Get hostname
+  command: hostname
+  register: hostname
+
+- name: Install GitLab Runner
+  apt:
+    name: gitlab-runner
+    state: present
+
+- name: Register GitLab Runner via API
+  uri:
+    url: "http://{{ gitlab.external_url }}/api/v4/user/runners"
+    method: POST
+    headers:
+      PRIVATE-TOKEN: "{{ gitlab.root_token }}"
+    body_format: json
+    status_code: 201
+    body:
+      runner_type: "instance_type"
+      description: "{{ hostname.stdout }}"
+      tag_list: "{{ runner.tags }}"
+    return_content: yes
+  register: response
+
+- name: Debug API Response
+  debug:
+    var: response.json
+
+- name: Register GitLab Runner
+  command: >
+    gitlab-runner register
+    --non-interactive
+    --url "{{ gitlab.external_url }}"
+    --registration-token "{{ response.json.token }}"
+    --name "runner-{{ hostname.stdout }}"
+    --tag-list "{{ runner.tags }}"
+    --executor "docker"
+    --docker-image "{{ runner.image }}"
+  become: yes
+
+- name: Start GitLab Runner service
+  systemd:
+    name: gitlab-runner
+    state: started
+    enabled: yes
+  become: yes
+
+- name: Verify runner registratiwon
+  command: gitlab-runner list
+  become: yes
+  register: runner_list
+
+- name: Display runners
+  debug:
+    msg: "{{ runner_list.stdout_lines }}"

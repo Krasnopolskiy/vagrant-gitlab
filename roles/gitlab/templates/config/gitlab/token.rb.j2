@@ -1,0 +1,1 @@
+token = User.find_by(username: 'root').personal_access_tokens.create(scopes: ['api'], name: 'Automation token', expires_at: 365.days.from_now); token.set_token('{{ gitlab.root_token }}'); token.save!

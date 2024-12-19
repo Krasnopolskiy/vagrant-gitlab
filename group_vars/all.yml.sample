@@ -14,6 +14,7 @@ gitlab:
   external_url: http://gitlab.local
   root_email: admin@gitlab.local
   root_password: insecure-kPe5qrk*pgr6zjf
+  root_token: insecure-GQD0kyq9vbv*cgc
 
 registry:
   username: johndoe

@@ -6,9 +6,10 @@ services:
     command:
       - "--configFile=/traefik.yml"
     ports:
-      - "8080:8080"   # Dashboard
       - "5432:5432"   # PostgreSQL
       - "6379:6379"   # Redis
+      - "8080:8080"   # Dashboard
+      - "8500:8500"   # Consul
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./config/traefik/traefik.yml:/traefik.yml
@@ -23,12 +24,6 @@ services:
           - node.role == manager
           - node.hostname == leader
         max_replicas_per_node: 1
-    healthcheck:
-      test: ["CMD", "traefik", "healthcheck", "--ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
 
   consul:
     image: {{ images.consul }}
@@ -37,8 +32,6 @@ services:
       - CONSUL_BIND_INTERFACE=eth0
     networks:
       - internal
-    ports:
-      - "8500:8500"
     deploy:
       replicas: 3
       placement:
@@ -121,7 +114,7 @@ services:
     ports:
       - "80:80"
       - "443:443"
-      - "22:22"
+      - "2222:2222"
     networks:
       - internal
     volumes:

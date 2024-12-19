@@ -1,16 +1,39 @@
 ---
+- name: Add /etc/hosts entry
+  lineinfile:
+    path: /etc/hosts
+    line: "{{ hostvars[groups['leader'][0]]['ansible_default_ipv4']['address'] }} gitlab.local"
+    create: yes
+    backup: yes
+
 - name: Install pip requirements
   pip:
     name: jsondiff
     state: present
 
-- name: Create directory for GitLab stack
+- name: Login to docker registry
+  community.docker.docker_login:
+    username: "{{ registry.username }}"
+    password: "{{ registry.password }}"
+    registry_url: "{{ registry.url }}"
+
+- name: Pull docker images
+  community.docker.docker_image_pull:
+    name: "{{ item.value }}"
+  with_dict: "{{ images }}"
+
+- name: Create directories for GitLab stack
   file:
-    path: "{{ stack_dir }}"
+    path: "{{ item }}"
     state: directory
     owner: root
     group: root
     mode: '0755'
+  loop:
+    - "{{ stack_dir }}"
+    - "{{ stack_dir }}/config"
+    - "{{ stack_dir }}/config/gitlab"
+    - "{{ gfs.mount_point }}/gitlab"
 
 - name: Sync docker-stack files
   synchronize:
@@ -30,25 +53,6 @@
     src: config/gitlab/gitlab.rb.j2
     dest: "{{ stack_dir }}/config/gitlab/gitlab.rb"
 
-- name: Login to docker registry
-  community.docker.docker_login:
-    username: "{{ registry.username }}"
-    password: "{{ registry.password }}"
-    registry_url: "{{ registry.url }}"
-
-- name: Pull docker images
-  community.docker.docker_image_pull:
-    name: "{{ item.value }}"
-  with_dict: "{{ images }}"
-
-- name: Create directory for GitLab data
-  file:
-    path: "/mnt/glusterfs/gfs/gitlab"
-    state: directory
-    owner: root
-    group: root
-    mode: '0755'
-
 - name: Deploy GitLab stack
   community.docker.docker_stack:
     name: gitlab
@@ -56,3 +60,13 @@
     compose:
       - "{{ stack_file }}"
   when: inventory_hostname == 'leader'
+
+- name: Generate admin access token
+  import_tasks:
+    file: token.yml
+  when: inventory_hostname in groups['workers']
+
+- name: Initialize runners
+  import_tasks:
+    file: runners.yml
+  when: inventory_hostname in groups['workers']

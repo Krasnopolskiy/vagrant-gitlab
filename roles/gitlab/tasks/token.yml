@@ -1,0 +1,15 @@
+---
+- name: Retrieve GitLab container id
+  command: docker ps --filter "ancestor={{ images.gitlab }}" --format "{{ '{{' }}.ID{{ '}}' }}"
+  register: container
+
+- name: Load generate command
+  set_fact:
+    generate: "{{ lookup('template', 'config/gitlab/token.rb.j2') }}"
+  when: container.stdout != ""
+
+- name: Generate GitLab private access token
+  community.docker.docker_container_exec:
+    container: "{{ container.stdout }}"
+    command: "gitlab-rails runner \"{{ generate }}\""
+  when: container.stdout != ""
