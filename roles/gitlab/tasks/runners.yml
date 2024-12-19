@@ -1,0 +1,81 @@
+---
+- name: Set leader address as variable
+  set_fact:
+    gateway: "{{ hostvars[groups['leader'][0]]['ansible_default_ipv4']['address'] }}"
+
+- name: Get hostname
+  command: hostname
+  register: hostname
+
+- name: Wait for GitLab to be ready
+  uri:
+    url: "{{ gateway }}/api/v4/version"
+    method: GET
+    status_code: 200
+    validate_certs: yes
+  register: healthcheck
+  until: healthcheck.status == 200
+  retries: "30"
+  delay: "10"
+
+- name: Get GitLab access token
+  uri:
+    url: "{{ gateway }}/api/v4/session"
+    method: POST
+    body_format: json
+    body:
+      email: "{{ gitlab.root_email }}"
+      password: "{{ gitlab.root_password }}"
+    status_code: 201
+  register: session
+
+- name: Debug token
+  debug:
+    msg: "GitLab Response: {{ session }}"
+
+- name: Get runner registration token
+  uri:
+    url: "{{ gateway }}/api/v4/runners/registration_token"
+    method: GET
+    headers:
+      PRIVATE-TOKEN: "{{ session.json.private_token }}"
+    status_code: 200
+    validate_certs: yes
+  register: token
+
+- name: Display token
+  debug:
+    msg: "GitLab Response: {{ token }}"
+
+- name: Install GitLab Runner
+  apt:
+    name: gitlab-runner
+    state: present
+
+- name: Register GitLab Runner
+  command: >
+    gitlab-runner register
+    --non-interactive
+    --url "{{ gitlab.external_url }}"
+    --registration-token "{{ token.json.token }}"
+    --name "runner-{{ hostname.stdout }}"
+    --tag-list "{{ runner.tags }}"
+    --executor "docker"
+    --docker-image "{{ runner.image }}"
+  become: yes
+
+- name: Start GitLab Runner service
+  systemd:
+    name: gitlab-runner
+    state: started
+    enabled: yes
+  become: yes
+
+- name: Verify runner registratiwon
+  command: gitlab-runner list
+  become: yes
+  register: runner_list
+
+- name: Display runners
+  debug:
+    msg: "{{ runner_list.stdout_lines }}"

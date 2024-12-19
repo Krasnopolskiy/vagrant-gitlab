@@ -6,9 +6,10 @@ services:
     command:
       - "--configFile=/traefik.yml"
     ports:
-      - "8080:8080"   # Dashboard
       - "5432:5432"   # PostgreSQL
       - "6379:6379"   # Redis
+      - "8080:8080"   # Dashboard
+      - "8500:8500"   # Consul
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./config/traefik/traefik.yml:/traefik.yml
@@ -37,8 +38,6 @@ services:
       - CONSUL_BIND_INTERFACE=eth0
     networks:
       - internal
-    ports:
-      - "8500:8500"
     deploy:
       replicas: 3
       placement:

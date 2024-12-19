@@ -1,3 +1,6 @@
 ---
 stack_dir: /opt/gitlab
 stack_file: "{{ stack_dir }}/docker-stack.yml"
+runner:
+  tags: "docker"
+  image: "alpine:latest"

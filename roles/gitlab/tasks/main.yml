@@ -4,13 +4,18 @@
     name: jsondiff
     state: present
 
-- name: Create directory for GitLab stack
+- name: Create directories for GitLab stack
   file:
-    path: "{{ stack_dir }}"
+    path: "{{ item }}"
     state: directory
     owner: root
     group: root
     mode: '0755'
+  loop:
+    - "{{ stack_dir }}"
+    - "{{ stack_dir }}/config"
+    - "{{ stack_dir }}/config/gitlab"
+    - "{{ gfs.mount_point }}/gitlab"
 
 - name: Sync docker-stack files
   synchronize:
@@ -41,14 +46,6 @@
     name: "{{ item.value }}"
   with_dict: "{{ images }}"
 
-- name: Create directory for GitLab data
-  file:
-    path: "/mnt/glusterfs/gfs/gitlab"
-    state: directory
-    owner: root
-    group: root
-    mode: '0755'
-
 - name: Deploy GitLab stack
   community.docker.docker_stack:
     name: gitlab
@@ -56,3 +53,8 @@
     compose:
       - "{{ stack_file }}"
   when: inventory_hostname == 'leader'
+
+- name: Initialize runners
+  import_tasks:
+    file: runners.yml
+  when: inventory_hostname in groups['workers']
